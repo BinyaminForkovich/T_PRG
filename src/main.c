@@ -6,7 +6,24 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(_WIN32)
+#include <conio.h>
+#endif
+
 #define SIZE 4
+#define USERNAME_LIMIT 63
+#define PASSWORD_LIMIT 63
+#define PATH_LIMIT 256
+
+typedef struct {
+    char username[USERNAME_LIMIT + 1];
+    char password[PASSWORD_LIMIT + 1];
+    int board[SIZE][SIZE];
+    uint64_t score;
+    uint64_t highscore;
+    bool won;
+    bool has_saved_game;
+} UserProfile;
 
 static void clear_screen(void) {
     printf("\033[2J\033[H");
@@ -18,6 +35,48 @@ static void reset_board(int board[SIZE][SIZE]) {
             board[row][col] = 0;
         }
     }
+}
+
+static void trim_newline(char *text) {
+    size_t length = strlen(text);
+
+    while (length > 0 && (text[length - 1] == '\n' || text[length - 1] == '\r')) {
+        text[--length] = '\0';
+    }
+}
+
+static bool read_line(const char *prompt, char *buffer, size_t buffer_size) {
+    if (prompt != NULL) {
+        printf("%s", prompt);
+    }
+
+    if (fgets(buffer, (int)buffer_size, stdin) == NULL) {
+        return false;
+    }
+
+    if (strchr(buffer, '\n') == NULL) {
+        int ch;
+
+        while ((ch = getchar()) != '\n' && ch != EOF) {
+        }
+    }
+
+    trim_newline(buffer);
+    return true;
+}
+
+static char read_game_key(void) {
+#if defined(_WIN32)
+    return (char)_getch();
+#else
+    int ch;
+
+    do {
+        ch = getchar();
+    } while (ch == '\n' || ch == '\r');
+
+    return (char)ch;
+#endif
 }
 
 static int random_index(int limit) {
@@ -192,111 +251,412 @@ static bool has_moves(int board[SIZE][SIZE]) {
     return false;
 }
 
-static void print_board(int board[SIZE][SIZE], uint64_t score, bool won) {
+static void start_new_game(UserProfile *profile) {
+    reset_board(profile->board);
+    profile->score = 0;
+    profile->won = false;
+    profile->has_saved_game = true;
+    add_random_tile(profile->board);
+    add_random_tile(profile->board);
+}
+
+static void print_board(const UserProfile *profile) {
     clear_screen();
     printf("2048\n");
-    printf("Score: %llu\n\n", (unsigned long long)score);
+    printf("Player: %s\n", profile->username);
+    printf("Score: %llu   High score: %llu\n\n",
+           (unsigned long long)profile->score,
+           (unsigned long long)profile->highscore);
 
     for (int row = 0; row < SIZE; ++row) {
         printf("+------+------+------+------+");
         printf("\n");
         for (int col = 0; col < SIZE; ++col) {
-            if (board[row][col] == 0) {
+            if (profile->board[row][col] == 0) {
                 printf("|%6s", "");
             } else {
-                printf("|%6d", board[row][col]);
+                printf("|%6d", profile->board[row][col]);
             }
         }
         printf("|\n");
     }
     printf("+------+------+------+------+");
     printf("\n\n");
-    printf("Controls: W/A/S/D move, R restart, Q quit\n");
-    if (won) {
+    printf("Controls: W/A/S/D move, R restart, L logout, Q quit\n");
+    if (profile->won) {
         printf("You reached 2048. Keep going or restart for another run.\n");
     }
 }
 
-static void start_new_game(int board[SIZE][SIZE], uint64_t *score, bool *won) {
-    reset_board(board);
-    *score = 0;
-    *won = false;
-    add_random_tile(board);
-    add_random_tile(board);
+static void username_to_path(const char *username, char *path, size_t size) {
+    size_t used = 0;
+
+    if (size == 0) {
+        return;
+    }
+
+    if (size < 6) {
+        path[0] = '\0';
+        return;
+    }
+
+    memcpy(path, "user_", 5);
+    used = 5;
+
+    for (const unsigned char *cursor = (const unsigned char *)username; *cursor != '\0'; ++cursor) {
+        if (used + 2 >= size) {
+            path[0] = '\0';
+            return;
+        }
+
+        snprintf(path + used, size - used, "%02X", *cursor);
+        used += 2;
+    }
+
+    if (used + 4 >= size) {
+        path[0] = '\0';
+        return;
+    }
+
+    memcpy(path + used, ".sav", 5);
 }
 
-int main(void) {
-    int board[SIZE][SIZE];
-    uint64_t score = 0;
-    bool won = false;
-    char input[64];
+static bool load_profile_file(const char *path, UserProfile *profile) {
+    FILE *file = fopen(path, "r");
+    char line[PATH_LIMIT];
 
-    srand((unsigned)time(NULL));
-    start_new_game(board, &score, &won);
+    if (file == NULL) {
+        return false;
+    }
+
+    if (fgets(line, sizeof(line), file) == NULL) {
+        fclose(file);
+        return false;
+    }
+    trim_newline(line);
+    if (strcmp(line, "2048PROFILE 1") != 0) {
+        fclose(file);
+        return false;
+    }
+
+    if (fgets(profile->username, sizeof(profile->username), file) == NULL) {
+        fclose(file);
+        return false;
+    }
+    trim_newline(profile->username);
+
+    if (fgets(profile->password, sizeof(profile->password), file) == NULL) {
+        fclose(file);
+        return false;
+    }
+    trim_newline(profile->password);
+
+    if (fgets(line, sizeof(line), file) == NULL) {
+        fclose(file);
+        return false;
+    }
+    trim_newline(line);
+    profile->highscore = strtoull(line, NULL, 10);
+
+    if (fgets(line, sizeof(line), file) == NULL) {
+        fclose(file);
+        return false;
+    }
+    trim_newline(line);
+    profile->has_saved_game = strtol(line, NULL, 10) != 0;
+
+    if (fgets(line, sizeof(line), file) == NULL) {
+        fclose(file);
+        return false;
+    }
+    trim_newline(line);
+    profile->score = strtoull(line, NULL, 10);
+
+    if (fgets(line, sizeof(line), file) == NULL) {
+        fclose(file);
+        return false;
+    }
+    trim_newline(line);
+    profile->won = strtol(line, NULL, 10) != 0;
+
+    for (int row = 0; row < SIZE; ++row) {
+        if (fgets(line, sizeof(line), file) == NULL) {
+            fclose(file);
+            return false;
+        }
+
+        if (sscanf(line, "%d %d %d %d",
+                   &profile->board[row][0],
+                   &profile->board[row][1],
+                   &profile->board[row][2],
+                   &profile->board[row][3]) != SIZE) {
+            fclose(file);
+            return false;
+        }
+    }
+
+    fclose(file);
+    return true;
+}
+
+static bool save_profile_file(const UserProfile *profile) {
+    char path[PATH_LIMIT];
+    FILE *file;
+
+    username_to_path(profile->username, path, sizeof(path));
+    if (path[0] == '\0') {
+        return false;
+    }
+
+    file = fopen(path, "w");
+    if (file == NULL) {
+        return false;
+    }
+
+    fprintf(file, "2048PROFILE 1\n");
+    fprintf(file, "%s\n", profile->username);
+    fprintf(file, "%s\n", profile->password);
+    fprintf(file, "%llu\n", (unsigned long long)profile->highscore);
+    fprintf(file, "%d\n", profile->has_saved_game ? 1 : 0);
+    fprintf(file, "%llu\n", (unsigned long long)profile->score);
+    fprintf(file, "%d\n", profile->won ? 1 : 0);
+
+    for (int row = 0; row < SIZE; ++row) {
+        fprintf(file, "%d %d %d %d\n",
+                profile->board[row][0],
+                profile->board[row][1],
+                profile->board[row][2],
+                profile->board[row][3]);
+    }
+
+    fclose(file);
+    return true;
+}
+
+static bool prompt_username(char *username) {
+    while (read_line("Username: ", username, USERNAME_LIMIT + 1)) {
+        if (username[0] != '\0') {
+            return true;
+        }
+        printf("Username cannot be empty.\n");
+    }
+
+    return false;
+}
+
+static bool prompt_password(const char *prompt, char *password) {
+    while (read_line(prompt, password, PASSWORD_LIMIT + 1)) {
+        if (password[0] != '\0') {
+            return true;
+        }
+        printf("Password cannot be empty.\n");
+    }
+
+    return false;
+}
+
+static bool register_user(UserProfile *profile) {
+    char confirm[PASSWORD_LIMIT + 1];
+    char path[PATH_LIMIT];
+
+    clear_screen();
+    printf("Create account\n\n");
+
+    if (!prompt_username(profile->username)) {
+        return false;
+    }
+
+    username_to_path(profile->username, path, sizeof(path));
+    if (path[0] == '\0') {
+        printf("Username is too long.\n");
+        return false;
+    }
+
+    if (load_profile_file(path, profile)) {
+        printf("That username already exists.\n");
+        return false;
+    }
+
+    if (!prompt_password("Password: ", profile->password)) {
+        return false;
+    }
+
+    if (!prompt_password("Confirm password: ", confirm)) {
+        return false;
+    }
+
+    if (strcmp(profile->password, confirm) != 0) {
+        printf("Passwords do not match.\n");
+        return false;
+    }
+
+    reset_board(profile->board);
+    profile->score = 0;
+    profile->highscore = 0;
+    profile->won = false;
+    profile->has_saved_game = false;
+
+    return save_profile_file(profile);
+}
+
+static bool login_user(UserProfile *profile) {
+    char password[PASSWORD_LIMIT + 1];
+    char path[PATH_LIMIT];
+    UserProfile loaded_profile;
+
+    clear_screen();
+    printf("Login\n\n");
+
+    if (!prompt_username(profile->username)) {
+        return false;
+    }
+
+    username_to_path(profile->username, path, sizeof(path));
+    if (path[0] == '\0' || !load_profile_file(path, &loaded_profile)) {
+        printf("Account not found. Create it first.\n");
+        return false;
+    }
+
+    if (!prompt_password("Password: ", password)) {
+        return false;
+    }
+
+    if (strcmp(password, loaded_profile.password) != 0) {
+        printf("Invalid password.\n");
+        return false;
+    }
+
+    *profile = loaded_profile;
+    return true;
+}
+
+static bool authenticate(UserProfile *profile) {
+    char choice[16];
 
     for (;;) {
-        print_board(board, score, won);
+        clear_screen();
+        printf("2048\n\n");
+        printf("L) Login\n");
+        printf("R) Register\n");
+        printf("Q) Quit\n\n");
 
-        if (!has_moves(board)) {
-            printf("Game over. Press R to restart or Q to quit.\n");
+        if (!read_line("Choice: ", choice, sizeof(choice))) {
+            return false;
+        }
+
+        switch (tolower((unsigned char)choice[0])) {
+            case 'l':
+                if (login_user(profile)) {
+                    return true;
+                }
+                read_line("Press Enter to continue...", choice, sizeof(choice));
+                break;
+            case 'r':
+                if (register_user(profile)) {
+                    return true;
+                }
+                read_line("Press Enter to continue...", choice, sizeof(choice));
+                break;
+            case 'q':
+                return false;
+            default:
+                printf("Invalid choice.\n");
+                read_line("Press Enter to continue...", choice, sizeof(choice));
+                break;
+        }
+    }
+}
+
+static void sync_highscore(UserProfile *profile) {
+    if (profile->score > profile->highscore) {
+        profile->highscore = profile->score;
+    }
+}
+
+static void run_game(UserProfile *profile) {
+    for (;;) {
+        print_board(profile);
+
+        if (!has_moves(profile->board)) {
+            printf("Game over. Press R to restart, L to logout or Q to quit.\n");
         }
 
         printf("Move: ");
-        if (fgets(input, sizeof(input), stdin) == NULL) {
-            break;
-        }
-
-        char command = (char)tolower((unsigned char)input[0]);
+        char command = (char)tolower((unsigned char)read_game_key());
         bool moved = false;
 
         if (command == 'q') {
-            break;
+            save_profile_file(profile);
+            return;
         }
+
+        if (command == 'l') {
+            save_profile_file(profile);
+            return;
+        }
+
         if (command == 'r') {
-            start_new_game(board, &score, &won);
+            start_new_game(profile);
+            save_profile_file(profile);
             continue;
         }
 
         switch (command) {
             case 'a':
-                moved = move_left(board, &score);
+                moved = move_left(profile->board, &profile->score);
                 break;
             case 'd':
-                moved = move_right(board, &score);
+                moved = move_right(profile->board, &profile->score);
                 break;
             case 'w':
-                moved = move_up(board, &score);
+                moved = move_up(profile->board, &profile->score);
                 break;
             case 's':
-                moved = move_down(board, &score);
+                moved = move_down(profile->board, &profile->score);
                 break;
             default:
                 continue;
         }
 
         if (moved) {
-            add_random_tile(board);
-            if (!won && has_won(board)) {
-                won = true;
+            add_random_tile(profile->board);
+            if (!profile->won && has_won(profile->board)) {
+                profile->won = true;
             }
-        }
-
-        if (!has_moves(board)) {
-            print_board(board, score, won);
-            printf("Game over. Press R to restart or Q to quit.\n");
-            printf("Move: ");
-            if (fgets(input, sizeof(input), stdin) == NULL) {
-                break;
-            }
-            command = (char)tolower((unsigned char)input[0]);
-            if (command == 'q') {
-                break;
-            }
-            if (command == 'r') {
-                start_new_game(board, &score, &won);
-            }
+            sync_highscore(profile);
+            profile->has_saved_game = true;
+            save_profile_file(profile);
         }
     }
+}
 
+int main(void) {
+    UserProfile profile;
+
+    memset(&profile, 0, sizeof(profile));
+    srand((unsigned)time(NULL));
+
+    if (!authenticate(&profile)) {
+        return 0;
+    }
+
+    if (profile.has_saved_game) {
+        char answer[8];
+
+        clear_screen();
+        printf("Welcome back, %s.\n\n", profile.username);
+        printf("Resume saved game? [Y/n]: ");
+        if (fgets(answer, sizeof(answer), stdin) != NULL) {
+            if (tolower((unsigned char)answer[0]) == 'n') {
+                start_new_game(&profile);
+                save_profile_file(&profile);
+            }
+        }
+    } else {
+        start_new_game(&profile);
+        save_profile_file(&profile);
+    }
+
+    run_game(&profile);
     return 0;
 }
