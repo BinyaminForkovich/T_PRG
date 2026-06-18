@@ -1,0 +1,115 @@
+﻿diff --git a/src/main.c b/src/main.c
+index b8238ef..511e621 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -1,5 +1,6 @@
+ #include <ctype.h>
+ #include <stdbool.h>
++#include <stdint.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+@@ -19,6 +20,22 @@ static void reset_board(int board[SIZE][SIZE]) {
+     }
+ }
+ 
++static int random_index(int limit) {
++    if (limit <= 0) {
++        return 0;
++    }
++
++    int bucket_size = RAND_MAX / limit;
++    int threshold = bucket_size * limit;
++    int value;
++
++    do {
++        value = rand();
++    } while (value >= threshold);
++
++    return value / bucket_size;
++}
++
+ static void add_random_tile(int board[SIZE][SIZE]) {
+     int empty_count = 0;
+     int empty_rows[SIZE * SIZE];
+@@ -38,11 +55,11 @@ static void add_random_tile(int board[SIZE][SIZE]) {
+         return;
+     }
+ 
+-    int choice = rand() % empty_count;
++    int choice = random_index(empty_count);
+     board[empty_rows[choice]][empty_cols[choice]] = (rand() % 10 == 0) ? 4 : 2;
+ }
+ 
+-static bool slide_line(int line[SIZE], int *score) {
++static bool slide_line(int line[SIZE], uint64_t *score) {
+     int original[SIZE];
+     int compact[SIZE];
+     int merged[SIZE] = {0};
+@@ -75,7 +92,7 @@ static bool slide_line(int line[SIZE], int *score) {
+     return memcmp(original, line, sizeof(original)) != 0;
+ }
+ 
+-static bool move_left(int board[SIZE][SIZE], int *score) {
++static bool move_left(int board[SIZE][SIZE], uint64_t *score) {
+     bool moved = false;
+ 
+     for (int row = 0; row < SIZE; ++row) {
+@@ -85,7 +102,7 @@ static bool move_left(int board[SIZE][SIZE], int *score) {
+     return moved;
+ }
+ 
+-static bool move_right(int board[SIZE][SIZE], int *score) {
++static bool move_right(int board[SIZE][SIZE], uint64_t *score) {
+     bool moved = false;
+ 
+     for (int row = 0; row < SIZE; ++row) {
+@@ -105,7 +122,7 @@ static bool move_right(int board[SIZE][SIZE], int *score) {
+     return moved;
+ }
+ 
+-static bool move_up(int board[SIZE][SIZE], int *score) {
++static bool move_up(int board[SIZE][SIZE], uint64_t *score) {
+     bool moved = false;
+ 
+     for (int col = 0; col < SIZE; ++col) {
+@@ -125,7 +142,7 @@ static bool move_up(int board[SIZE][SIZE], int *score) {
+     return moved;
+ }
+ 
+-static bool move_down(int board[SIZE][SIZE], int *score) {
++static bool move_down(int board[SIZE][SIZE], uint64_t *score) {
+     bool moved = false;
+ 
+     for (int col = 0; col < SIZE; ++col) {
+@@ -175,10 +192,10 @@ static bool has_moves(int board[SIZE][SIZE]) {
+     return false;
+ }
+ 
+-static void print_board(int board[SIZE][SIZE], int score, bool won) {
++static void print_board(int board[SIZE][SIZE], uint64_t score, bool won) {
+     clear_screen();
+     printf("2048\n");
+-    printf("Score: %d\n\n", score);
++    printf("Score: %llu\n\n", (unsigned long long)score);
+ 
+     for (int row = 0; row < SIZE; ++row) {
+         printf("+------+------+------+------+");
+@@ -200,7 +217,7 @@ static void print_board(int board[SIZE][SIZE], int score, bool won) {
+     }
+ }
+ 
+-static void start_new_game(int board[SIZE][SIZE], int *score, bool *won) {
++static void start_new_game(int board[SIZE][SIZE], uint64_t *score, bool *won) {
+     reset_board(board);
+     *score = 0;
+     *won = false;
+@@ -210,7 +227,7 @@ static void start_new_game(int board[SIZE][SIZE], int *score, bool *won) {
+ 
+ int main(void) {
+     int board[SIZE][SIZE];
+-    int score = 0;
++    uint64_t score = 0;
+     bool won = false;
+     char input[64];
+ 
