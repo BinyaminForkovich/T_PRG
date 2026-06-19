@@ -616,7 +616,7 @@ static void sync_highscore(UserProfile *profile) {
     }
 }
 
-static bool play_turn(UserProfile *profile) {
+static int play_turn(UserProfile *profile) {
     print_board(profile);
 
     if (!has_moves(profile->board)) {
@@ -625,15 +625,20 @@ static bool play_turn(UserProfile *profile) {
 
     int command = read_command();
 
-    if (command == 'q' || command == 'l') {
+    if (command == 'q') {
         save_profile_file(profile);
-        return false;
+        return 0;
+    }
+
+    if (command == 'l') {
+        save_profile_file(profile);
+        return -1;
     }
 
     if (command == 'r') {
         start_new_game(profile);
         save_profile_file(profile);
-        return true;
+        return 1;
     }
 
     bool moved = false;
@@ -652,7 +657,7 @@ static bool play_turn(UserProfile *profile) {
             moved = move_down(profile->board, &profile->score);
             break;
         default:
-            return true;
+            return 1;
     }
 
     if (moved) {
@@ -666,18 +671,19 @@ static bool play_turn(UserProfile *profile) {
     profile->has_saved_game = true;
     save_profile_file(profile);
 
-    return true;
+    return 1;
 }
 
-static void run_game(UserProfile *profile) {
+static int run_game(UserProfile *profile) {
     for (;;) {
-        if (!play_turn(profile)) {
-            return;
+        int result = play_turn(profile);
+        if (result != 1) {
+            return result;
         }
     }
 }
 
-void play_session(UserProfile *profile) {
+bool play_session(UserProfile *profile) {
     if (profile->has_saved_game) {
         clear_screen();
         printf("Welcome back, %s.\n\n", profile->username);
@@ -695,5 +701,5 @@ void play_session(UserProfile *profile) {
         save_profile_file(profile);
     }
 
-    run_game(profile);
+    return run_game(profile) == 0;
 }

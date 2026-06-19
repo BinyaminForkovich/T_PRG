@@ -19,6 +19,6 @@ typedef struct {
 } UserProfile;
 
 bool authenticate(UserProfile *profile);
-void play_session(UserProfile *profile);
+bool play_session(UserProfile *profile);
 
 #endif

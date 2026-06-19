@@ -5,15 +5,19 @@
 #include "game.h"
 
 int main(void) {
-    UserProfile profile;
-
-    memset(&profile, 0, sizeof(profile));
     srand((unsigned)time(NULL));
 
-    if (!authenticate(&profile)) {
-        return 0;
-    }
+    for (;;) {
+        UserProfile profile;
 
-    play_session(&profile);
-    return 0;
+        memset(&profile, 0, sizeof(profile));
+
+        if (!authenticate(&profile)) {
+            return 0;
+        }
+
+        if (play_session(&profile)) {
+            return 0;
+        }
+    }
 }
