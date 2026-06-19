@@ -1,4 +1,4 @@
-# 2048 in C
+# T_PRG - 2048 in C
 
 A portable console implementation of the 2048 game written in C.
 
