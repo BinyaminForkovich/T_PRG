@@ -15,7 +15,7 @@ make
 Or compile directly:
 
 ```sh
-gcc -std=c11 -O2 -Wall -Wextra -pedantic src/main.c -o 2048
+gcc -std=c11 -O2 -Wall -Wextra -pedantic src/*.c -o 2048
 ```
 
 ## Run

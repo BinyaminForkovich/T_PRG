@@ -1,7 +1,7 @@
 CC ?= gcc
 CFLAGS ?= -std=c11 -O2 -Wall -Wextra -pedantic
 TARGET := 2048
-SRC := src/main.c
+SRC := $(wildcard src/*.c)
 
 .PHONY: all clean run
 
