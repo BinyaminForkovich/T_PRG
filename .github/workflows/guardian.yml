@@ -59,7 +59,7 @@ jobs:
             -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 `
             --add-host=host.docker.internal:host-gateway `
             -v "${{ github.workspace }}:/target_repo:ro" `
-            -v "${{ github.workspace }}\logs:/app/logs:rw" `
+            -v "${{ github.workspace }}\logs:/app/guardian_agent/logs:rw" `
             -w /target_repo `
             guardian-agent `
             python -u /app/guardian_agent/main.py
