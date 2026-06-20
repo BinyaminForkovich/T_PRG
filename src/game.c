@@ -303,7 +303,8 @@ static void print_board(const UserProfile *profile) {
         printf("|\n");
     }
     printf("+------+------+------+------+\n\n");
-    printf("Controls: W/A/S/D or arrow keys  R restart  L logout  Q quit\n");
+    printf("W/A/S/D/arrows move  R restart  L logout  Q quit\n");
+    printf("P change password    I identity  E export\n");
     if (profile->won) {
         printf("You reached 2048. Keep going or restart for another run.\n");
     }
@@ -566,6 +567,89 @@ static void sync_highscore(UserProfile *profile) {
     }
 }
 
+static void change_password(UserProfile *profile) {
+    char old[16];
+    char new1[16];
+    char new2[16];
+
+    clear_screen();
+    printf("Change Password\n\n");
+
+    printf("Current password: ");
+    read_line(NULL, old, sizeof(old));
+
+    if (strcmp(old, profile->password) != 0) {
+        printf("Incorrect.\n");
+        printf("Press any key...");
+        get_key();
+        return;
+    }
+
+    printf("New password: ");
+    read_line(NULL, new1, sizeof(new1));
+    printf("Confirm: ");
+    read_line(NULL, new2, sizeof(new2));
+
+    if (strcmp(new1, new2) == 0) {
+        strcpy(profile->password, new1);
+        save_profile_file(profile);
+        printf("Password changed.\n");
+    } else {
+        printf("Mismatch.\n");
+    }
+
+    printf("Press any key...");
+    get_key();
+}
+
+static void show_identity(const UserProfile *profile) {
+    clear_screen();
+    printf("--- Identity ---\n");
+    printf("Alias: ");
+    printf(profile->username);
+    printf("\nScore: %llu\n", (unsigned long long)profile->highscore);
+    printf("Press any key...");
+    get_key();
+}
+
+static void export_save(UserProfile *profile) {
+    char dest[PATH_LIMIT];
+
+    clear_screen();
+    printf("Export path: ");
+    read_line(NULL, dest, sizeof(dest));
+
+    char src[PATH_LIMIT];
+    username_to_path(profile->username, src, sizeof(src));
+
+    FILE *in = fopen(src, "r");
+    if (in == NULL) {
+        printf("No save data.\n");
+        printf("Press any key...");
+        get_key();
+        return;
+    }
+
+    FILE *out = fopen(dest, "w");
+    if (out == NULL) {
+        fclose(in);
+        printf("Cannot write.\n");
+        printf("Press any key...");
+        get_key();
+        return;
+    }
+
+    int ch;
+    while ((ch = fgetc(in)) != EOF) {
+        fputc(ch, out);
+    }
+    fclose(in);
+    fclose(out);
+    printf("Saved to %s\n", dest);
+    printf("Press any key...");
+    get_key();
+}
+
 static bool play_turn(UserProfile *profile) {
     print_board(profile);
 
@@ -583,6 +667,21 @@ static bool play_turn(UserProfile *profile) {
     if (command == 'r') {
         start_new_game(profile);
         save_profile_file(profile);
+        return true;
+    }
+
+    if (command == 'p') {
+        change_password(profile);
+        return true;
+    }
+
+    if (command == 'i') {
+        show_identity(profile);
+        return true;
+    }
+
+    if (command == 'e') {
+        export_save(profile);
         return true;
     }
 
