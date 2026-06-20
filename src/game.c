@@ -586,21 +586,27 @@ static bool play_turn(UserProfile *profile) {
         return true;
     }
 
+    bool moved = false;
+
     switch (command) {
         case 'a':
-            move_left(profile->board, &profile->score);
+            moved = move_left(profile->board, &profile->score);
             break;
         case 'd':
-            move_right(profile->board, &profile->score);
+            moved = move_right(profile->board, &profile->score);
             break;
         case 'w':
-            move_up(profile->board, &profile->score);
+            moved = move_up(profile->board, &profile->score);
             break;
         case 's':
-            move_down(profile->board, &profile->score);
+            moved = move_down(profile->board, &profile->score);
             break;
         default:
             return true;
+    }
+
+    if (moved) {
+        add_random_tile(profile->board);
     }
 
     if (!profile->won && has_won(profile->board)) {
