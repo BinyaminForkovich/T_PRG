@@ -7,6 +7,9 @@
 
 #if defined(_WIN32)
 #include <conio.h>
+#else
+#include <termios.h>
+#include <unistd.h>
 #endif
 
 #define PATH_LIMIT 256
@@ -32,6 +35,55 @@ static void trim_newline(char *text) {
     while (length > 0 && (text[length - 1] == '\n' || text[length - 1] == '\r')) {
         text[--length] = '\0';
     }
+}
+
+static int get_key(void) {
+#if defined(_WIN32)
+    return _getch();
+#else
+    struct termios oldt, newt;
+    int ch;
+
+    tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= (tcflag_t)~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    ch = getchar();
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    return ch;
+#endif
+}
+
+static int read_command(void) {
+    int ch = get_key();
+
+    if (ch == 0x1b) {
+        ch = get_key();
+        if (ch == '[') {
+            ch = get_key();
+            switch (ch) {
+                case 'A': return 'w';
+                case 'B': return 's';
+                case 'C': return 'd';
+                case 'D': return 'a';
+            }
+        }
+        return 'q';
+    }
+
+#if defined(_WIN32)
+    if (ch == 224 || ch == 0) {
+        ch = get_key();
+        switch (ch) {
+            case 72: return 'w';
+            case 80: return 's';
+            case 75: return 'a';
+            case 77: return 'd';
+        }
+    }
+#endif
+
+    return (int)(unsigned char)tolower(ch);
 }
 
 static bool read_line(const char *prompt, char *buffer, size_t buffer_size) {
@@ -251,7 +303,7 @@ static void print_board(const UserProfile *profile) {
         printf("|\n");
     }
     printf("+------+------+------+------+\n\n");
-    printf("Controls: W/A/S/D move, R restart, L logout, Q quit\n");
+    printf("Controls: W/A/S/D or arrow keys  R restart  L logout  Q quit\n");
     if (profile->won) {
         printf("You reached 2048. Keep going or restart for another run.\n");
     }
@@ -471,37 +523,38 @@ static bool login_user(UserProfile *profile) {
 }
 
 bool authenticate(UserProfile *profile) {
-    char choice[16];
-
     for (;;) {
         clear_screen();
         printf("2048\n\n");
         printf("L) Login\n");
         printf("R) Register\n");
         printf("Q) Quit\n\n");
+        printf("Choice: ");
 
-        if (!read_line("Choice: ", choice, sizeof(choice))) {
-            return false;
-        }
+        int ch = get_key();
+        printf("%c\n", ch);
 
-        switch (tolower((unsigned char)choice[0])) {
+        switch (ch) {
             case 'l':
                 if (login_user(profile)) {
                     return true;
                 }
-                read_line("Press Enter to continue...", choice, sizeof(choice));
+                printf("Press any key to continue...");
+                get_key();
                 break;
             case 'r':
                 if (register_user(profile)) {
                     return true;
                 }
-                read_line("Press Enter to continue...", choice, sizeof(choice));
+                printf("Press any key to continue...");
+                get_key();
                 break;
             case 'q':
                 return false;
             default:
                 printf("Invalid choice.\n");
-                read_line("Press Enter to continue...", choice, sizeof(choice));
+                printf("Press any key to continue...");
+                get_key();
                 break;
         }
     }
@@ -514,20 +567,13 @@ static void sync_highscore(UserProfile *profile) {
 }
 
 static bool play_turn(UserProfile *profile) {
-    char input[64];
-
     print_board(profile);
 
     if (!has_moves(profile->board)) {
         printf("Game over. Press R to restart, L to logout or Q to quit.\n");
     }
 
-    printf("Move: ");
-    if (fgets(input, sizeof(input), stdin) == NULL) {
-        return false;
-    }
-
-    char command = (char)tolower((unsigned char)input[0]);
+    int command = read_command();
 
     if (command == 'q' || command == 'l') {
         save_profile_file(profile);
@@ -577,16 +623,16 @@ static void run_game(UserProfile *profile) {
 
 void play_session(UserProfile *profile) {
     if (profile->has_saved_game) {
-        char answer[8];
-
         clear_screen();
         printf("Welcome back, %s.\n\n", profile->username);
         printf("Resume saved game? [Y/n]: ");
-        if (fgets(answer, sizeof(answer), stdin) != NULL) {
-            if (tolower((unsigned char)answer[0]) == 'n') {
-                start_new_game(profile);
-                save_profile_file(profile);
-            }
+
+        int ch = get_key();
+        printf("%c\n", ch);
+
+        if (ch == 'n' || ch == 'N') {
+            start_new_game(profile);
+            save_profile_file(profile);
         }
     } else {
         start_new_game(profile);
