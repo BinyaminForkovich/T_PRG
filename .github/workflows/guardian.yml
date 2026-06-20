@@ -22,10 +22,12 @@ jobs:
           SECRETS_JSON: ${{ toJson(secrets) }}
           VARS_JSON: ${{ toJson(vars) }}
         run: |
-          # Check for a persistent local fallback file
-          if (Test-Path .env.local) {
+          # Check for a persistent local fallback file 3 directories up (in runner root)
+          $fallbackPath = "..\..\..\.env.local"
+          
+          if (Test-Path $fallbackPath) {
               Write-Host "Found .env.local file! Using it as fallback..."
-              Copy-Item -Path .env.local -Destination .env -Force
+              Copy-Item -Path $fallbackPath -Destination .env -Force
           } else {
               Write-Host "No local fallback found. Generating from GitHub Secrets..."
               New-Item -Path .env -ItemType File -Force | Out-Null
