@@ -631,4 +631,3 @@ void play_session(UserProfile *profile) {
 
     run_game(profile);
 }
-
